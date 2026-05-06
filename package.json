@@ -1,0 +1,33 @@
+{
+  "name": "pulsex_backend",
+  "version": "1.0.0",
+  "description": "PulseX - RoadSoS backend system for intelligent accident detection, emergency response coordination, realtime ambulance tracking, police monitoring, and AI-assisted rescue management.",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon --delay 3 src/index.js"
+  },
+  "keywords": [
+    "PulseX",
+    "Hackathon",
+    "RoadSoS"
+  ],
+  "author": "Aftab",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^6.0.0",
+    "chalk": "^5.6.2",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "crypto": "^1.0.1",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.6.1",
+    "morgan": "^1.10.1",
+    "nodemon": "^3.1.14",
+    "prettier": "^3.8.3",
+    "winston": "^3.19.0"
+  }
+}
