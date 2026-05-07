@@ -50,11 +50,11 @@ app.use(
 );
 
 // import routes
-// import healthCheckRouter from "./routes/healthCheck.routes.js";
+import healthCheckRouter from "./routes/healthcheck.routes.js";
 
 
 // routes
-// app.use("/api/v1/healthcheck", healthCheckRouter);
+app.use("/api/v1/healthcheck", healthCheckRouter);
 
 // / route
 app.get("/", (req, res) => {
