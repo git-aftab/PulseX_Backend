@@ -21,6 +21,12 @@ const userSchema = new mongoose.Schema(
       trim: true,
     },
 
+    username: {
+      type: String,
+      unique: true,
+      trim: true,
+    },
+
     phone: {
       type: String,
       required: [true, "Phone number is required"],
@@ -72,21 +78,14 @@ const userSchema = new mongoose.Schema(
 );
 
 // ======================
-// INDEXES
-// ======================
-
-userSchema.index({ email: 1 });
-userSchema.index({ phone: 1 });
-
-// ======================
 // HASH PASSWORD
 // ======================
 
-userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
+userSchema.pre("save", async function () {
+  // Only hash the password if it has been modified
+  if (!this.isModified("password")) return;
 
   this.password = await bcrypt.hash(this.password, 10);
-  next();
 });
 
 // ======================
@@ -102,13 +101,15 @@ userSchema.methods.isPasswordCorrect = async function (password) {
 // ======================
 
 userSchema.methods.generateAccessToken = function () {
+  const accessSecret = process.env.ACCESS_TOKEN_SECRET || 'dev_access_secret';
+
   return jwt.sign(
     {
       _id: this._id,
       role: this.role,
       email: this.email,
     },
-    process.env.ACCESS_TOKEN_SECRET,
+    accessSecret,
     {
       expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "15m",
     },
@@ -120,11 +121,13 @@ userSchema.methods.generateAccessToken = function () {
 // ======================
 
 userSchema.methods.generateRefreshToken = function () {
+  const refreshSecret = process.env.REFRESH_TOKEN_SECRET || 'dev_refresh_secret';
+
   return jwt.sign(
     {
       _id: this._id,
     },
-    process.env.REFRESH_TOKEN_SECRET,
+    refreshSecret,
     {
       expiresIn: process.env.REFRESH_TOKEN_EXPIRY || "7d",
     },
