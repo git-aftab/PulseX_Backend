@@ -2,6 +2,7 @@ import "dotenv/config";
 import logger from "./utils/logger.js";
 import connectDB from "./db/index.js";
 import app from "./app.js";
+import { initMqtt } from "./services/mqtt.service.js";
 
 const PORT = process.env.PORT || 3000;
 
@@ -12,6 +13,12 @@ connectDB()
 
     app.listen(PORT, () => {
       logger.info(`Server running on http://localhost:${PORT}`);
+      // initialize MQTT after server starts
+      try {
+        initMqtt();
+      } catch (err) {
+        logger.error("MQTT init error", err);
+      }
     });
   })
   .catch((error) => {

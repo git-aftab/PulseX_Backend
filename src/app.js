@@ -52,11 +52,17 @@ app.use(
 // import routes
 import healthCheckRouter from "./routes/healthcheck.routes.js";
 import authRouter from "./routes/auth.route.js";
+import ambulanceRouter from "./routes/ambulance.route.js";
+import hospitalRouter from "./routes/hospital.route.js";
+import incidentRouter from "./routes/incident.route.js";
 
 
 // routes
 app.use("/api/v1/healthcheck", healthCheckRouter);
 app.use("/api/v1/auth", authRouter);
+app.use("/api/v1/ambulances", ambulanceRouter);
+app.use("/api/v1/hospitals", hospitalRouter);
+app.use("/api/v1/incidents", incidentRouter);
 
 // / route
 app.get("/", (req, res) => {
