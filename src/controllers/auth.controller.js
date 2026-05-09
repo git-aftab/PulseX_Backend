@@ -3,6 +3,7 @@ import { User } from "../models/user.model.js";
 import { ApiError } from "../utils/apiError.js";
 import { ApiResponse } from "../utils/apiResponse.js";
 import { asyncHandler } from "../utils/asyncHandler.js";
+import { AvailableUserRole, UserRolesEnum } from "../constants/constant.js";
 
 const cookieOptions = {
   httpOnly: true,
@@ -36,7 +37,7 @@ const generateAccessAndRefreshTokens = async (userId) => {
 // ==============================
 
 export const registerUser = asyncHandler(async (req, res) => {
-  const { fullname, email, password, phone } = req.body;
+  const { fullname, email, password, phone, role } = req.body;
 
   // Validation
   if (
@@ -45,6 +46,21 @@ export const registerUser = asyncHandler(async (req, res) => {
     )
   ) {
     throw new ApiError(400, "All fields are required");
+  }
+
+  // Role assignment - only allowed via server-side invite (admin key)
+  let assignedRole = UserRolesEnum.USER;
+  if (role && role.trim() !== "") {
+    if (!AvailableUserRole.includes(role)) {
+      throw new ApiError(400, "Invalid role");
+    }
+
+    const inviteKey = req.header("x-admin-key") || req.body.adminKey;
+    if (!inviteKey || inviteKey !== process.env.ADMIN_INVITE_KEY) {
+      throw new ApiError(403, "Insufficient permissions to assign role");
+    }
+
+    assignedRole = role;
   }
 
   // Check existing user
@@ -63,6 +79,7 @@ export const registerUser = asyncHandler(async (req, res) => {
     username: email,
     password,
     phone,
+    role: assignedRole,
   });
 
   // Remove sensitive fields
@@ -222,4 +239,34 @@ export const getCurrentUser = asyncHandler(async (req, res) => {
   return res
     .status(200)
     .json(new ApiResponse(200, req.user, "Current user fetched successfully"));
+});
+
+// ==============================
+// ASSIGN ROLE (ADMIN ONLY)
+// ==============================
+export const assignRole = asyncHandler(async (req, res) => {
+  const { userId, role } = req.body;
+
+  if (!userId || !role) {
+    throw new ApiError(400, "userId and role are required");
+  }
+
+  if (!AvailableUserRole.includes(role)) {
+    throw new ApiError(400, "Invalid role");
+  }
+
+  const user = await User.findById(userId).select("-password -refreshToken");
+
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
+  user.role = role;
+  await user.save({ validateBeforeSave: false });
+
+  const updatedUser = await User.findById(userId).select("-password -refreshToken");
+
+  return res
+    .status(200)
+    .json(new ApiResponse(200, updatedUser, "User role updated successfully"));
 });
