@@ -4,11 +4,24 @@ import { ApiError } from "../utils/apiError.js";
 import { Hospital } from "../models/hospital.model.js";
 
 export const registerHospital = asyncHandler(async (req, res) => {
-  const { hospitalName, registrationNumber, coordinates, contactNumber, traumaLevel } = req.body;
+  const {
+    hospitalName,
+    registrationNumber,
+    coordinates,
+    contactNumber,
+    traumaLevel,
+    totalBeds = 0,
+    availableBeds = 0,
+    emergencyAvailable = true,
+  } = req.body;
 
   if (!hospitalName || !registrationNumber || !coordinates) {
     throw new ApiError(400, "hospitalName, registrationNumber and coordinates are required");
   }
+
+  const totalBedsNum = Number(totalBeds) || 0;
+  const availableBedsNum = Number(availableBeds) || 0;
+  const emergencyFlag = !(emergencyAvailable === false || emergencyAvailable === 'false');
 
   const hospital = await Hospital.create({
     user: req.user._id,
@@ -17,6 +30,10 @@ export const registerHospital = asyncHandler(async (req, res) => {
     location: { type: "Point", coordinates },
     contactNumber,
     traumaLevel,
+    totalBeds: totalBedsNum,
+    availableBeds: availableBedsNum,
+    emergencyAvailable: emergencyFlag,
+    hospitalCapacityStatus: availableBedsNum <= 0 ? "FULL" : availableBedsNum <= 2 ? "LIMITED" : "AVAILABLE",
   });
 
   return res.status(201).json(new ApiResponse(201, hospital, "Hospital registered"));

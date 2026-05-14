@@ -5,6 +5,7 @@ import { Incident } from "../models/incident.model.js";
 import { Ambulance } from "../models/ambulance.model.js";
 import { Hospital } from "../models/hospital.model.js";
 import { findNearestAvailableHospital } from "../services/hospital.service.js";
+import logger from "../utils/logger.js";
 
 // create incident (user/device)
 export const createIncident = asyncHandler(async (req, res) => {
@@ -103,5 +104,69 @@ export const resolveIncident = asyncHandler(async (req, res) => {
     await ambulance.save({ validateBeforeSave: false });
   }
 
+  // free hospital bed if assigned
+  if (incident.assignedHospital) {
+    try {
+      const hospital = await Hospital.findById(incident.assignedHospital);
+      if (hospital) {
+        hospital.availableBeds = (hospital.availableBeds || 0) + 1;
+        if (hospital.availableBeds > 0) hospital.hospitalCapacityStatus = "AVAILABLE";
+        await hospital.save({ validateBeforeSave: false });
+      }
+    } catch (err) {
+      console.error("Failed to free hospital bed", err);
+    }
+  }
+
   return res.status(200).json(new ApiResponse(200, incident, "Incident resolved"));
+});
+
+// GET active incidents (PENDING or ASSIGNED)
+export const getActiveIncidents = asyncHandler(async (req, res) => {
+  const incidents = await Incident.find({ status: { $in: ["PENDING", "ASSIGNED"] } }).limit(200);
+  return res.status(200).json(new ApiResponse(200, incidents, "OK"));
+});
+
+// Cancel incident
+export const cancelIncident = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const incident = await Incident.findById(id);
+  if (!incident) throw new ApiError(404, "Incident not found");
+
+  // only reporter or admin can cancel
+  if (req.user.role !== 'admin' && (!incident.reporter || incident.reporter.toString() !== req.user._id.toString())) {
+    throw new ApiError(403, "Forbidden");
+  }
+
+  incident.status = "CANCELLED";
+  await incident.save({ validateBeforeSave: false });
+
+  // free ambulance if assigned
+  if (incident.assignedAmbulance) {
+    try {
+      const ambulance = await Ambulance.findById(incident.assignedAmbulance);
+      if (ambulance) {
+        ambulance.availabilityStatus = "AVAILABLE";
+        await ambulance.save({ validateBeforeSave: false });
+      }
+    } catch (err) {
+      console.error("Failed to free ambulance on cancel", err);
+    }
+  }
+
+  // free hospital bed if assigned
+  if (incident.assignedHospital) {
+    try {
+      const hospital = await Hospital.findById(incident.assignedHospital);
+      if (hospital) {
+        hospital.availableBeds = (hospital.availableBeds || 0) + 1;
+        if (hospital.availableBeds > 0) hospital.hospitalCapacityStatus = "AVAILABLE";
+        await hospital.save({ validateBeforeSave: false });
+      }
+    } catch (err) {
+      console.error("Failed to free hospital bed on cancel", err);
+    }
+  }
+
+  return res.status(200).json(new ApiResponse(200, incident, "Incident cancelled"));
 });
