@@ -2,6 +2,7 @@ import 'dotenv/config';
 import mongoose from 'mongoose';
 import assert from 'assert';
 import { Hospital } from '../src/models/hospital.model.js';
+import { User } from '../src/models/user.model.js';
 import { findNearestAvailableHospital } from '../src/services/hospital.service.js';
 
 async function run(){
@@ -11,9 +12,12 @@ async function run(){
   const reg = 'UNIT-TEST-HOSP-' + Date.now();
   const coords = [80.2707,13.0827];
 
+  // create a temp user to own the hospital
+  const tempUser = await User.create({ fullname: 'TestHospUser', email: 'test-hosp-' + Date.now() + '@local.test', username: 'test-hosp-' + Date.now() + '@local.test', phone: '999900' + Math.floor(Math.random()*10000), password: 'TempPass1!' });
+
   // create hospital with available beds
   const h = await Hospital.create({
-    user: null,
+    user: tempUser._id,
     hospitalName: 'UT Hospital',
     registrationNumber: reg,
     location: { type: 'Point', coordinates: coords },
