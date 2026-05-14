@@ -3,11 +3,13 @@ import { ApiResponse } from "../utils/apiResponse.js";
 import { ApiError } from "../utils/apiError.js";
 import { Incident } from "../models/incident.model.js";
 import { Ambulance } from "../models/ambulance.model.js";
+import { Hospital } from "../models/hospital.model.js";
+import { findNearestAvailableHospital } from "../services/hospital.service.js";
 
 // create incident (user/device)
 export const createIncident = asyncHandler(async (req, res) => {
   const { lng, lat, deviceId, vitals } = req.body;
-  if (!lng || !lat) throw new ApiError(400, "lng and lat are required");
+  if (typeof lng === "undefined" || typeof lat === "undefined") throw new ApiError(400, "lng and lat are required");
 
   const incident = await Incident.create({
     reporter: req.user?._id,
@@ -15,6 +17,26 @@ export const createIncident = asyncHandler(async (req, res) => {
     location: { type: "Point", coordinates: [lng, lat] },
     vitals,
   });
+
+  // attempt to assign nearest available hospital
+  try {
+    const hospital = await findNearestAvailableHospital(lng, lat);
+    if (hospital) {
+      incident.assignedHospital = hospital._id;
+      await incident.save({ validateBeforeSave: false });
+
+      // decrement bed count if possible
+      if (typeof hospital.availableBeds === 'number') {
+        hospital.availableBeds = Math.max(0, hospital.availableBeds - 1);
+        if (hospital.availableBeds <= 0) hospital.hospitalCapacityStatus = "FULL";
+        else if (hospital.availableBeds <= 2) hospital.hospitalCapacityStatus = "LIMITED";
+        await hospital.save({ validateBeforeSave: false });
+      }
+    }
+  } catch (err) {
+    // log but don't block incident creation
+    console.error("Hospital assignment failed", err);
+  }
 
   return res.status(201).json(new ApiResponse(201, incident, "Incident created"));
 });

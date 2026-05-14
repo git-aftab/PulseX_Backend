@@ -2,6 +2,7 @@ import mqtt from "mqtt";
 import logger from "../utils/logger.js";
 import { Incident } from "../models/incident.model.js";
 import { Device } from "../models/device.model.js";
+import { findNearestAvailableHospital } from "../services/hospital.service.js";
 
 const MQTT_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
 const MQTT_TOPIC = process.env.MQTT_TOPIC || "devices/+/sos"; // subscribe to device sos topics
@@ -49,6 +50,26 @@ export const initMqtt = () => {
           location: { type: "Point", coordinates: [parseFloat(lng), parseFloat(lat)] },
           vitals,
         });
+
+        // attempt hospital assignment
+        try {
+          const hospital = await findNearestAvailableHospital(lng, lat);
+          if (hospital) {
+            incident.assignedHospital = hospital._id;
+            await incident.save({ validateBeforeSave: false });
+
+            if (typeof hospital.availableBeds === 'number') {
+              hospital.availableBeds = Math.max(0, hospital.availableBeds - 1);
+              if (hospital.availableBeds <= 0) hospital.hospitalCapacityStatus = "FULL";
+              else if (hospital.availableBeds <= 2) hospital.hospitalCapacityStatus = "LIMITED";
+              await hospital.save({ validateBeforeSave: false });
+            }
+
+            logger.info("MQTT incident assigned hospital", { incidentId: incident._id.toString(), hospitalId: hospital._id.toString() });
+          }
+        } catch (err) {
+          logger.error("Failed to assign hospital for MQTT incident", err);
+        }
 
         logger.info("MQTT incident created", { incidentId: incident._id.toString(), deviceId });
       } catch (err) {
