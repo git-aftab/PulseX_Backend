@@ -3,6 +3,7 @@ import logger from "../utils/logger.js";
 import { Incident } from "../models/incident.model.js";
 import { Device } from "../models/device.model.js";
 import { findNearestAvailableHospital } from "../services/hospital.service.js";
+import { emitEvent } from "../services/socket.service.js";
 
 const MQTT_URL = process.env.MQTT_BROKER_URL || "mqtt://localhost:1883";
 const MQTT_TOPIC = process.env.MQTT_TOPIC || "devices/+/sos"; // subscribe to device sos topics
@@ -66,12 +67,32 @@ export const initMqtt = () => {
             }
 
             logger.info("MQTT incident assigned hospital", { incidentId: incident._id.toString(), hospitalId: hospital._id.toString() });
+
+            // emit realtime events for MQTT-created incident
+            try {
+              emitEvent('/ambulance', 'incident_created', incident);
+              emitEvent('/hospital', 'incident_created', incident);
+              emitEvent('/police', 'incident_created', incident);
+              if (incident.reporter) emitEvent('/user', 'incident_created', { incident, userId: incident.reporter });
+            } catch (err) {
+              logger.error('Failed to emit socket events for MQTT incident', err);
+            }
           }
         } catch (err) {
           logger.error("Failed to assign hospital for MQTT incident", err);
         }
 
         logger.info("MQTT incident created", { incidentId: incident._id.toString(), deviceId });
+
+        // also emit created if not assigned above
+        try {
+          emitEvent('/ambulance', 'incident_created', incident);
+          emitEvent('/hospital', 'incident_created', incident);
+          emitEvent('/police', 'incident_created', incident);
+          if (incident.reporter) emitEvent('/user', 'incident_created', { incident, userId: incident.reporter });
+        } catch (err) {
+          logger.error('Failed to emit socket events for MQTT incident', err);
+        }
       } catch (err) {
         logger.error("Failed processing MQTT message", err);
       }

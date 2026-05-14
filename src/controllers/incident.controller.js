@@ -6,6 +6,7 @@ import { Ambulance } from "../models/ambulance.model.js";
 import { Hospital } from "../models/hospital.model.js";
 import { findNearestAvailableHospital } from "../services/hospital.service.js";
 import logger from "../utils/logger.js";
+import { emitEvent } from "../services/socket.service.js";
 
 // create incident (user/device)
 export const createIncident = asyncHandler(async (req, res) => {
@@ -36,7 +37,17 @@ export const createIncident = asyncHandler(async (req, res) => {
     }
   } catch (err) {
     // log but don't block incident creation
-    console.error("Hospital assignment failed", err);
+    logger.error("Hospital assignment failed", err);
+  }
+
+  // emit realtime events
+  try {
+    emitEvent('/ambulance', 'incident_created', incident);
+    emitEvent('/hospital', 'incident_created', incident);
+    emitEvent('/police', 'incident_created', incident);
+    if (incident.reporter) emitEvent('/user', 'incident_created', { incident, userId: incident.reporter });
+  } catch (err) {
+    logger.error('Failed to emit incident_created', err);
   }
 
   return res.status(201).json(new ApiResponse(201, incident, "Incident created"));
@@ -81,6 +92,15 @@ export const acceptIncident = asyncHandler(async (req, res) => {
   ambulance.availabilityStatus = "BUSY";
   await ambulance.save({ validateBeforeSave: false });
 
+  // emit realtime event
+  try {
+    emitEvent('/ambulance', 'incident_assigned', updated);
+    emitEvent('/hospital', 'incident_assigned', updated);
+    if (updated.assignedAmbulance) emitEvent('/user', 'incident_assigned', { incident: updated, ambulanceId: updated.assignedAmbulance });
+  } catch (err) {
+    logger.error('Failed to emit incident_assigned', err);
+  }
+
   return res.status(200).json(new ApiResponse(200, updated, "Incident assigned"));
 });
 
@@ -114,8 +134,18 @@ export const resolveIncident = asyncHandler(async (req, res) => {
         await hospital.save({ validateBeforeSave: false });
       }
     } catch (err) {
-      console.error("Failed to free hospital bed", err);
+      logger.error("Failed to free hospital bed", err);
     }
+  }
+
+  // emit realtime event
+  try {
+    emitEvent('/ambulance', 'incident_resolved', incident);
+    emitEvent('/hospital', 'incident_resolved', incident);
+    emitEvent('/police', 'incident_resolved', incident);
+    if (req.user) emitEvent('/user', 'incident_resolved', { incident, userId: req.user._id });
+  } catch (err) {
+    logger.error('Failed to emit incident_resolved', err);
   }
 
   return res.status(200).json(new ApiResponse(200, incident, "Incident resolved"));
@@ -164,8 +194,18 @@ export const cancelIncident = asyncHandler(async (req, res) => {
         await hospital.save({ validateBeforeSave: false });
       }
     } catch (err) {
-      console.error("Failed to free hospital bed on cancel", err);
+      logger.error("Failed to free hospital bed on cancel", err);
     }
+  }
+
+  // emit realtime event
+  try {
+    emitEvent('/ambulance', 'incident_cancelled', incident);
+    emitEvent('/hospital', 'incident_cancelled', incident);
+    emitEvent('/police', 'incident_cancelled', incident);
+    if (req.user) emitEvent('/user', 'incident_cancelled', { incident, userId: req.user._id });
+  } catch (err) {
+    logger.error('Failed to emit incident_cancelled', err);
   }
 
   return res.status(200).json(new ApiResponse(200, incident, "Incident cancelled"));

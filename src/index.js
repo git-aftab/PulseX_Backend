@@ -3,6 +3,7 @@ import logger from "./utils/logger.js";
 import connectDB from "./db/index.js";
 import app from "./app.js";
 import { initMqtt } from "./services/mqtt.service.js";
+import { initSocket } from "./services/socket.service.js";
 
 const PORT = process.env.PORT || 3000;
 
@@ -11,7 +12,7 @@ connectDB()
   .then(() => {
     logger.info("MongoDB connected");
 
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       logger.info(`Server running on http://localhost:${PORT}`);
       // initialize MQTT after server starts
       try {
@@ -20,6 +21,13 @@ connectDB()
         logger.error("MQTT init error", err);
       }
     });
+
+    // initialize Socket.IO
+    try {
+      initSocket(server);
+    } catch (err) {
+      logger.error("Socket init error", err);
+    }
   })
   .catch((error) => {
     logger.error("Mongo connection error", error);
