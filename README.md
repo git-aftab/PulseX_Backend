@@ -1,203 +1,722 @@
-# PulseX Backend
+# 🚑 PulseX Backend
 
-PulseX - RoadSoS backend for intelligent accident detection and emergency response coordination.
+> **PulseX — Intelligent RoadSOS Backend for Real-Time Accident Detection & Emergency Response Coordination**
 
-## Quick start
+A scalable backend system built for handling emergency incidents, ambulance coordination, hospital assignment, realtime communication, and geospatial emergency response workflows.
 
-Prerequisites:
-- Node 18+
-- MongoDB accessible (local or cloud)
-- MQTT broker (optional for MQTT features)
+---
 
-Install & run:
+# ✨ Features
+
+* 🔐 JWT Authentication & Role-Based Access
+* 🚑 Ambulance Registration & Live Location Tracking
+* 🏥 Nearby Hospital Discovery using Geo Queries
+* ⚡ Intelligent Incident Assignment
+* 📡 Realtime Updates with Socket.IO
+* 📶 MQTT Integration Support
+* 🌍 MongoDB Geospatial Queries (`2dsphere`)
+* 🧠 Automated Emergency Coordination Workflow
+* 🛡 Secure Cookie + Bearer Token Support
+
+---
+
+# 📦 Tech Stack
+
+| Technology         | Purpose                    |
+| ------------------ | -------------------------- |
+| Node.js            | Backend Runtime            |
+| Express.js         | API Framework              |
+| MongoDB + Mongoose | Database                   |
+| Socket.IO          | Realtime Communication     |
+| MQTT               | IoT / Device Communication |
+| JWT                | Authentication             |
+| Nodemon            | Development Workflow       |
+
+---
+
+# 🚀 Quick Start
+
+## 📋 Prerequisites
+
+Make sure you have:
+
+* Node.js `v18+`
+* MongoDB (Local or Cloud)
+* MQTT Broker *(optional)*
+
+---
+
+## ⚙️ Installation
 
 ```bash
-git clone `https://github.com/git-aftab/PulseX_Backend.git`
+git clone https://github.com/git-aftab/PulseX_Backend.git
+
 cd PulseX_Backend
+
 npm install
-npm run dev        # runs nodemon src/index.js
-npm test           # runs tests/test_hospital_assignment.js
 ```
 
-## Environment variables
+---
 
-Create a `.env` file in project root. Important variables used by the app:
+## ▶️ Run the Project
 
-- MONGO_URI - MongoDB connection string
-- PORT - server port (default 3000)
-- ACCESS_TOKEN_SECRET - JWT access token secret (dev default: `dev_access_secret`)
-- REFRESH_TOKEN_SECRET - JWT refresh token secret (dev default: `dev_refresh_secret`)
-- ACCESS_TOKEN_EXPIRY - access token expiry (default `15m`)
-- REFRESH_TOKEN_EXPIRY - refresh token expiry (default `7d`)
-- ADMIN_INVITE_KEY - server-side key to allow role assignment during register/assign-role
-- CORS_ORIGIN - comma separated allowed origins (default `http://localhost:5173`)
-- MQTT_URL - (optional) URL for MQTT broker if used
-- NODE_ENV - `development` or `production`
+```bash
+npm run dev
+```
 
-## Base URL
+Runs:
 
-All APIs are mounted under `/api/v1` when running (example: http://localhost:3000/api/v1)
+```bash
+nodemon src/index.js
+```
 
 ---
 
-## Routes (implemented)
+## 🧪 Run Tests
 
-Authentication (/api/v1/auth)
-- POST /register
-  - Body: { fullname, email, password, phone, role? }
-  - Notes: role assignment requires ADMIN_INVITE_KEY (x-admin-key header or adminKey body)
-  - Response: 201 created user (sanitized)
+```bash
+npm test
+```
 
-- POST /login
-  - Body: { email, password }
-  - Response: 200 with cookies `accessToken` and `refreshToken` and JSON { user, accessToken, refreshToken }
-  - Tokens also usable as `Authorization: Bearer <token>`
+Runs:
 
-- POST /refresh-access-token
-  - Body or cookie: refreshToken
-  - Response: new accessToken and refreshToken (set as cookies)
-
-- POST /logout
-  - Auth required (cookie or header). Clears tokens.
-
-- POST /assign-role
-  - Auth required; authorized only for admin (verifyJWT + authorizeRoles("admin"))
-  - Body: { userId, role }
-
-- GET /me
-  - Auth required; returns current user
-
-Healthcheck
-- GET /healthcheck/
-  - No auth. Returns server health status.
-
-Ambulances (/api/v1/ambulances)
-- POST /register
-  - Auth required; roles: ambulance_driver, admin
-  - Body: { vehicleNumber, driverLicenseNumber, hospitalId?, deviceId? }
-  - Response: 201 ambulance
-
-- GET /me
-  - Auth required; roles: ambulance_driver, admin
-  - Returns ambulance record for logged-in user
-
-- PATCH /:id/location
-  - Auth required; roles: ambulance_driver, admin
-  - Body: { lng, lat, availabilityStatus? }
-  - Updates ambulance currentLocation and lastActiveAt
-
-- POST /:id/accept
-  - Auth required; role: ambulance_driver
-  - Accept incident placeholder in ambulance controller (real assignment handled in incident controller)
-
-Hospitals (/api/v1/hospitals)
-- POST /register
-  - Auth required; roles: hospital, admin
-  - Body: { hospitalName, registrationNumber, coordinates: [lng, lat], contactNumber, traumaLevel, totalBeds, availableBeds, emergencyAvailable }
-  - Response: 201 created hospital
-
-- GET /nearby?lng=<lng>&lat=<lat>&radius=<meters>
-  - Auth required
-  - Response: list of nearby hospitals (uses 2dsphere index)
-
-- GET /me
-  - Auth required; roles: hospital, admin
-  - Returns hospital record for logged-in user
-
-Incidents (/api/v1/incidents)
-- POST /
-  - Auth required
-  - Body: { lng, lat, deviceId?, vitals? }
-  - Creates an incident (status PENDING) and attempts to auto-assign nearest hospital; emits realtime events
-
-- GET /active
-  - Auth required; roles: ambulance_driver, police, hospital, admin
-  - Returns incidents with status PENDING or ASSIGNED
-
-- GET /nearby?lng=<lng>&lat=<lat>&radius=<meters>
-  - Auth required; role: ambulance_driver
-  - Returns pending incidents near the coordinates
-
-- POST /:id/accept
-  - Auth required; role: ambulance_driver
-  - Atomically assigns ambulance to incident if still PENDING
-
-- POST /:id/resolve
-  - Auth required; roles: ambulance_driver, admin
-  - Marks incident RESOLVED, frees ambulance and hospital bed
-
-- PATCH /:id/cancel
-  - Auth required; reporter or admin can cancel
-  - Marks CANCELLED and releases resources
+```bash
+tests/test_hospital_assignment.js
+```
 
 ---
 
-## Models (key fields)
-- User: { fullname, email, username, phone, password (hashed), role, refreshToken }
-- Hospital: { user, hospitalName, registrationNumber, location: Point [lng,lat], contactNumber, totalBeds, availableBeds, hospitalCapacityStatus }
-- Ambulance: { user, vehicleNumber, driverLicenseNumber, hospital, currentLocation: Point, availabilityStatus }
-- Incident: { reporter, deviceId, location: Point, status (PENDING/ASSIGNED/RESOLVED/CANCELLED), assignedAmbulance, assignedHospital, vitals }
+# 🔑 Environment Variables
 
-## Auth & Cookies
-- Access token returned as cookie `accessToken` and as JSON. The API accepts tokens via cookie or `Authorization: Bearer <token>` header.
+Create a `.env` file in the root directory.
 
-## Realtime & MQTT
-- Socket and MQTT services are initialized in `src/index.js` via `initSocket` and `initMqtt`.
-- Events emitted by the server (examples): `incident_created`, `incident_assigned`, `incident_resolved`, `incident_cancelled` under namespaces like `/ambulance`, `/hospital`, `/police`, `/user`.
+```env
+MONGO_URI=
 
-## Sample curl requests
+PORT=3000
 
-Register user:
+ACCESS_TOKEN_SECRET=
+REFRESH_TOKEN_SECRET=
+
+ACCESS_TOKEN_EXPIRY=15m
+REFRESH_TOKEN_EXPIRY=7d
+
+ADMIN_INVITE_KEY=
+
+CORS_ORIGIN=http://localhost:5173
+
+MQTT_URL=
+
+NODE_ENV=development
+```
+
+---
+
+# 🌐 Base URL
+
+```txt
+http://localhost:3000/api/v1
+```
+
+Example:
+
+```txt
+http://localhost:3000/api/v1/auth/login
+```
+
+---
+
+# 📂 API Routes
+
+---
+
+# 🔐 Authentication Routes
+
+## `/api/v1/auth`
+
+### 📝 Register User
+
+```http
+POST /register
+```
+
+### Request Body
+
+```json
+{
+  "fullname": "John Doe",
+  "email": "john@example.com",
+  "password": "password123",
+  "phone": "9876543210",
+  "role": "hospital"
+}
+```
+
+### Notes
+
+* Role assignment requires:
+
+  * `x-admin-key` header
+  * OR `adminKey` in body
+
+---
+
+### 🔑 Login
+
+```http
+POST /login
+```
+
+### Response
+
+* Sets:
+
+  * `accessToken`
+  * `refreshToken`
+
+* Returns:
+
+```json
+{
+  "user": {},
+  "accessToken": "",
+  "refreshToken": ""
+}
+```
+
+---
+
+### ♻ Refresh Access Token
+
+```http
+POST /refresh-access-token
+```
+
+Accepts refresh token via:
+
+* Cookie
+* Request body
+
+---
+
+### 🚪 Logout
+
+```http
+POST /logout
+```
+
+* Clears auth cookies
+* Requires authentication
+
+---
+
+### 👤 Assign Role
+
+```http
+POST /assign-role
+```
+
+* Admin only
+* Middleware:
+
+  * `verifyJWT`
+  * `authorizeRoles("admin")`
+
+---
+
+### 🙋 Current User
+
+```http
+GET /me
+```
+
+Returns logged-in user details.
+
+---
+
+# ❤️ Healthcheck
+
+```http
+GET /healthcheck
+```
+
+Returns server health status.
+
+---
+
+# 🚑 Ambulance Routes
+
+## `/api/v1/ambulances`
+
+---
+
+### 🚑 Register Ambulance
+
+```http
+POST /register
+```
+
+### Allowed Roles
+
+* `ambulance_driver`
+* `admin`
+
+### Body
+
+```json
+{
+  "vehicleNumber": "TN01AB1234",
+  "driverLicenseNumber": "DL12345",
+  "hospitalId": "hospital_id",
+  "deviceId": "device_001"
+}
+```
+
+---
+
+### 👨‍⚕️ Get My Ambulance
+
+```http
+GET /me
+```
+
+Returns ambulance linked to logged-in driver.
+
+---
+
+### 📍 Update Ambulance Location
+
+```http
+PATCH /:id/location
+```
+
+### Body
+
+```json
+{
+  "lng": 77.6,
+  "lat": 12.9,
+  "availabilityStatus": "AVAILABLE"
+}
+```
+
+Updates:
+
+* Current location
+* Last active timestamp
+
+---
+
+### ✅ Accept Incident
+
+```http
+POST /:id/accept
+```
+
+Assigns ambulance to incident.
+
+---
+
+# 🏥 Hospital Routes
+
+## `/api/v1/hospitals`
+
+---
+
+### 🏥 Register Hospital
+
+```http
+POST /register
+```
+
+### Body
+
+```json
+{
+  "hospitalName": "City Hospital",
+  "registrationNumber": "REG123",
+  "coordinates": [77.6, 12.9],
+  "contactNumber": "9876543210",
+  "traumaLevel": "LEVEL_1",
+  "totalBeds": 100,
+  "availableBeds": 25,
+  "emergencyAvailable": true
+}
+```
+
+---
+
+### 📍 Nearby Hospitals
+
+```http
+GET /nearby?lng=<lng>&lat=<lat>&radius=<meters>
+```
+
+Uses MongoDB geospatial queries.
+
+---
+
+### 👨‍⚕️ My Hospital
+
+```http
+GET /me
+```
+
+Returns current hospital profile.
+
+---
+
+# 🚨 Incident Routes
+
+## `/api/v1/incidents`
+
+---
+
+### 🚨 Create Incident
+
+```http
+POST /
+```
+
+### Body
+
+```json
+{
+  "lng": 77.6,
+  "lat": 12.9,
+  "deviceId": "dev123",
+  "vitals": {
+    "heartRate": 90
+  }
+}
+```
+
+### Workflow
+
+* Creates incident
+* Auto-assigns nearest hospital
+* Emits realtime events
+
+---
+
+### 📡 Get Active Incidents
+
+```http
+GET /active
+```
+
+### Allowed Roles
+
+* `ambulance_driver`
+* `police`
+* `hospital`
+* `admin`
+
+---
+
+### 📍 Nearby Incidents
+
+```http
+GET /nearby?lng=<lng>&lat=<lat>&radius=<meters>
+```
+
+Returns nearby pending incidents.
+
+---
+
+### 🚑 Accept Incident
+
+```http
+POST /:id/accept
+```
+
+Atomically assigns ambulance.
+
+---
+
+### ✅ Resolve Incident
+
+```http
+POST /:id/resolve
+```
+
+* Marks incident as resolved
+* Frees ambulance
+* Releases hospital bed
+
+---
+
+### ❌ Cancel Incident
+
+```http
+PATCH /:id/cancel
+```
+
+Allowed for:
+
+* Reporter
+* Admin
+
+---
+
+# 🗄 Database Models
+
+---
+
+## 👤 User
+
+```js
+{
+  fullname,
+  email,
+  username,
+  phone,
+  password,
+  role,
+  refreshToken
+}
+```
+
+---
+
+## 🏥 Hospital
+
+```js
+{
+  user,
+  hospitalName,
+  registrationNumber,
+  location,
+  contactNumber,
+  totalBeds,
+  availableBeds,
+  hospitalCapacityStatus
+}
+```
+
+---
+
+## 🚑 Ambulance
+
+```js
+{
+  user,
+  vehicleNumber,
+  driverLicenseNumber,
+  hospital,
+  currentLocation,
+  availabilityStatus
+}
+```
+
+---
+
+## 🚨 Incident
+
+```js
+{
+  reporter,
+  deviceId,
+  location,
+  status,
+  assignedAmbulance,
+  assignedHospital,
+  vitals
+}
+```
+
+---
+
+# 🔐 Authentication System
+
+PulseX supports:
+
+* 🍪 Cookie-based authentication
+* 🔑 Bearer Token authentication
+
+Example:
+
+```http
+Authorization: Bearer <ACCESS_TOKEN>
+```
+
+---
+
+# 📡 Realtime & MQTT
+
+Initialized in:
+
+```txt
+src/index.js
+```
+
+### Services
+
+* `initSocket()`
+* `initMqtt()`
+
+---
+
+## 📢 Socket Events
+
+Examples:
+
+* `incident_created`
+* `incident_assigned`
+* `incident_resolved`
+* `incident_cancelled`
+
+Namespaces:
+
+* `/ambulance`
+* `/hospital`
+* `/police`
+* `/user`
+
+---
+
+# 🧪 Sample cURL Requests
+
+---
+
+## Register User
+
 ```bash
 curl -X POST http://localhost:3000/api/v1/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"fullname":"Alice","email":"a@example.com","password":"pass123","phone":"0001112222"}'
+-H "Content-Type: application/json" \
+-d '{
+  "fullname":"Alice",
+  "email":"a@example.com",
+  "password":"pass123",
+  "phone":"0001112222"
+}'
 ```
-
-Login:
-```bash
-curl -X POST http://localhost:3000/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"a@example.com","password":"pass123"}' -i
-```
-
-Create incident (using Authorization header):
-```bash
-curl -X POST http://localhost:3000/api/v1/incidents \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer <ACCESS_TOKEN>" \
-  -d '{"lng":77.6,"lat":12.9,"deviceId":"dev123","vitals":{"heartRate":90}}'
-```
-
-List nearby hospitals:
-```bash
-curl -X GET 'http://localhost:3000/api/v1/hospitals/nearby?lng=77.6&lat=12.9&radius=5000' \
-  -H "Authorization: Bearer <ACCESS_TOKEN>"
-```
-
-Ambulance accept incident:
-```bash
-curl -X POST http://localhost:3000/api/v1/incidents/<INCIDENT_ID>/accept \
-  -H "Authorization: Bearer <AMBULANCE_ACCESS_TOKEN>"
-```
-
-## Tests
-- `npm test` runs `tests/test_hospital_assignment.js` (simple unit/integration tests). Expand test coverage as needed.
-
-## To be built / Recommended endpoints and improvements
-- Admin endpoints: list users, list hospitals, approve hospital/ambulance, change hospital capacity manually
-- Device endpoints: device registration, secure device tokens
-- Metrics & monitoring: endpoint for stats (active incidents, ambulances online, bed occupancy)
-- Webhooks: notify external systems when incidents are created/resolved
-- Postman collection and OpenAPI spec
-- E2E tests for incident lifecycle (create -> assign -> accept -> resolve)
-- Role invitation flow and invite token management
-
-## Notes & troubleshooting
-- Geospatial queries require MongoDB 2dsphere index (already defined in models).
-- Default dev JWT secrets are in code fallback; set strong secrets in production.
-- If MQTT/socket features not needed for local testing, app still starts without MQTT if MQTT_URL is absent but ensure proper error handling for brokers.
 
 ---
 
-If you'd like, generate a Postman collection or an OpenAPI (Swagger) spec next — say "create OpenAPI" or "create Postman" and specify preferred format.
+## Login
+
+```bash
+curl -X POST http://localhost:3000/api/v1/auth/login \
+-H "Content-Type: application/json" \
+-d '{
+  "email":"a@example.com",
+  "password":"pass123"
+}' -i
+```
+
+---
+
+## Create Incident
+
+```bash
+curl -X POST http://localhost:3000/api/v1/incidents \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer <ACCESS_TOKEN>" \
+-d '{
+  "lng":77.6,
+  "lat":12.9,
+  "deviceId":"dev123",
+  "vitals":{
+    "heartRate":90
+  }
+}'
+```
+
+---
+
+## Nearby Hospitals
+
+```bash
+curl -X GET \
+'http://localhost:3000/api/v1/hospitals/nearby?lng=77.6&lat=12.9&radius=5000' \
+-H "Authorization: Bearer <ACCESS_TOKEN>"
+```
+
+---
+
+## Ambulance Accept Incident
+
+```bash
+curl -X POST \
+http://localhost:3000/api/v1/incidents/<INCIDENT_ID>/accept \
+-H "Authorization: Bearer <AMBULANCE_ACCESS_TOKEN>"
+```
+
+---
+
+# 📈 Future Improvements
+
+* 👨‍💼 Admin Dashboard APIs
+* 📱 Device Registration APIs
+* 📊 Metrics & Monitoring
+* 🔔 Webhook Integrations
+* 📘 OpenAPI / Swagger Docs
+* 📮 Postman Collection
+* 🧪 Full E2E Testing
+* 🎟 Role Invitation System
+
+---
+
+# ⚠️ Notes & Troubleshooting
+
+### 🌍 MongoDB Geospatial Queries
+
+Requires:
+
+```js
+2dsphere index
+```
+
+Already configured in models.
+
+---
+
+### 🔐 Production Security
+
+Do NOT use development JWT secrets in production.
+
+Use strong secrets:
+
+```env
+ACCESS_TOKEN_SECRET=
+REFRESH_TOKEN_SECRET=
+```
+
+---
+
+### 📡 MQTT Optional
+
+The app still runs without MQTT if:
+
+```env
+MQTT_URL=
+```
+
+is not provided.
+
+---
+
+# 🤝 Contributing
+
+Pull requests, improvements, and feature suggestions are welcome.
+
+---
+
+# 📄 License
+
+MIT License
+
+---
+
+# ⭐ Support
+
+If you found this project useful:
+
+* ⭐ Star the repository
+* 🍴 Fork the project
+* 🛠 Contribute improvements
+
+---
+
+### 🚀 Built for smarter emergency response systems.
